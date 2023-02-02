@@ -99,6 +99,7 @@ template TokenOffer
 
         -- we're going to give a right to the newOwner to accept the token
         -- once the newOwner accepts the token, a new token is created where they're the owner, and we update the last price
+        -- +++ [IMPORTANT] a party directly exercising this choice onto a TokenOffer contract WON'T WORK b/c this does NOT provide any evidance of him being a legitimate/authorized owner on this network. Therefore, this choice can ONLY be exercised THROUGH the party's owner contract +++
         choice AcceptToken: (ContractId Token, ContractId Payable, Optional(ContractId Payable)) -- create a tuple, make sure to return the 2 items in the return statement
             controller newOwner, userAdmin -- requires both the approval of the newOwner and userAdmin
             -- the token may be offered to any old party, but it also must be approved

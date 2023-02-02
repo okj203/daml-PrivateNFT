@@ -4,9 +4,15 @@
 sdk-version: 2.5.0
 name: myNFT
 source: daml
-init-script: Main:setup
+init-script: Main:setup 
+# init-script must be pointing to a valid script.
+# init-script initializes the Sandbox immediately after startup using that script.
 version: 0.0.1
 dependencies:
   - daml-prim
   - daml-stdlib
   - daml-script
+exposed-modules:
+  - Main
+navigator-options:
+ - --feature-user-management=false

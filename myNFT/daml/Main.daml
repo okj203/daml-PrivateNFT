@@ -10,6 +10,8 @@ setup = script do
   alice <- allocatePartyWithHint "Alice" (PartyIdHint "Alice")
   bob <- allocatePartyWithHint "Bob" (PartyIdHint "Bob")
   charlie <- allocatePartyWithHint "Charlie" (PartyIdHint "Charlie")
+  doug <- allocatePartyWithHint "Doug" (PartyIdHint "Doug")
+  ellen <- allocatePartyWithHint "Ellen" (PartyIdHint "Ellen")
   userAdmin <- allocatePartyWithHint "UserAdmin" (PartyIdHint "UserAdmin")
 
   now <- getTime
