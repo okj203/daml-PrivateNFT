@@ -46,6 +46,7 @@ template PaymentClaim
         transactionId: Text
     where
         signatory from
+        observer to -- [NS]
         
         choice Receive: ContractId Receipt
             controller to -- now the "to" party is the stakeholder, b/c they have the right to receive the payment

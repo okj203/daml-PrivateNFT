@@ -58,17 +58,28 @@ setup = script do
         owner = charlie
         reason = "FOMO I ALSO got connection"
 
+  charlieOwner <- submit userAdmin do
+    exerciseCmd charlieRequest GrantOwnerRights
+
+  -- AcceptTokenAsNewOwner returns 3 tuples/things:      
+  -- return (newToken, fromNewOwnerToOwner, condRoyaltyPayment)
+  -- amongst those 3, I only care about the newToken, so bob can exercise Offer on it to offer it to charlie
   (bobToken, _, _) <- submit bob do 
     exerciseCmd bobOwner AcceptTokenAsNewOwner
       with 
         offerId = bobOffer
 
+  -- bob offers the new token to charlie
   charlieOffer <- submit bob do 
     exerciseCmd bobToken Offer
       with
         newOwner = charlie
         price = 300.00
 
+  submit charlie do
+    exerciseCmd charlieOwner AcceptTokenAsNewOwner
+      with
+        offerId = charlieOffer
 
   -- submit bob do
   --   exerciseCmd bobOffer AcceptToken
@@ -123,7 +134,10 @@ To remedy, add one of the readers [Bob] as an observer to the contract.
 
 
 [4]
+When bob offers a new token to charlie:
+
 Tried to fetch or exercise -homePackageId-:Token:Token on contract 00124793186db0e303b068b9a0026b5e6649dbc596faa239438fae70ec511cba29 but none of the reading parties [Bob] are contract stakeholders [Alice,UserAdmin]. Use of divulged contracts is deprecated and incompatible with pruning. To remedy, add one of the readers [Bob] as an observer to the contract.Script
+
 ^ added "observer owner -- [NS]" to the Token template
 
 (30:21)
@@ -142,5 +156,7 @@ Tried to fetch or exercise -homePackageId-:Token:Token on contract 00124793186db
   I don't want the royalty payment out of that. (19:45)
   When you first purchase the art piece for the first time, you shouldn't have to pay for royalty, you should just a flat price.
   We fix our AccepToken choice so it won't always produce 3 contracts.
+
+  37:06
 -}
 
