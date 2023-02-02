@@ -12,7 +12,7 @@ dependencies:
   - daml-prim
   - daml-stdlib
   - daml-script
-exposed-modules:
-  - Main
+# exposed-modules:
+#   - Main
 navigator-options:
  - --feature-user-management=false
