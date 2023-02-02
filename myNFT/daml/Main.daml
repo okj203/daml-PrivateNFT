@@ -1,0 +1,146 @@
+module Main where
+
+import Token
+import UserAdmin
+
+import Daml.Script
+
+setup : Script ()
+setup = script do
+  alice <- allocatePartyWithHint "Alice" (PartyIdHint "Alice")
+  bob <- allocatePartyWithHint "Bob" (PartyIdHint "Bob")
+  charlie <- allocatePartyWithHint "Charlie" (PartyIdHint "Charlie")
+  userAdmin <- allocatePartyWithHint "UserAdmin" (PartyIdHint "UserAdmin")
+
+  now <- getTime
+
+  -- "aliceIssuer" is the handle on the Issuer contract, which stores the result of the creat action (type Update)
+  aliceIssuer <- submit userAdmin do
+    createCmd Issuer
+      with
+        userAdmin = userAdmin
+        issuer = alice
+
+  -- alice creates token from the Issuer rights template
+  originalToken <- submit alice do
+    exerciseCmd aliceIssuer MintToken
+      with
+        description = "Cat Pic 1"
+        initialPrice = 100.00
+        currency = "USD"
+        royaltyRate = 0.05
+
+  -- alice offers the nft (cat photo) to bob
+  bobOffer <- submit alice do
+    exerciseCmd originalToken Offer
+      with
+        newOwner = bob
+        price = 200.00 -- the price alice is charging bob
+
+  -- missing the authorization from userAdmin won't allow bob to accept the token
+  -- we only want verified individuals to be able to accept tokens on our network.
+  -- bob requests to be onboarded
+  bobRequest <- submit bob do
+    createCmd OwnerRequest
+      with
+        userAdmin = userAdmin
+        owner = bob
+        reason = "I've got connections"
+
+  -- bob gets the owner rights from userAdmin
+  bobOwner <- submit userAdmin do
+    exerciseCmd bobRequest GrantOwnerRights
+
+  charlieRequest <- submit charlie do
+    createCmd OwnerRequest
+      with
+        userAdmin = userAdmin
+        owner = charlie
+        reason = "FOMO I ALSO got connection"
+
+  (bobToken, _, _) <- submit bob do 
+    exerciseCmd bobOwner AcceptTokenAsNewOwner
+      with 
+        offerId = bobOffer
+
+  charlieOffer <- submit bob do 
+    exerciseCmd bobToken Offer
+      with
+        newOwner = charlie
+        price = 300.00
+
+
+  -- submit bob do
+  --   exerciseCmd bobOffer AcceptToken
+
+  return () -- type of the script becomes the "null" iteam
+
+{-
+
+[1]
+
+  submit alice do
+    createCmd Token
+      with
+        issuer = alice
+        owner = bob
+        description = "Cat Pic 1"
+        userAdmin = userAdmin
+        issued = now
+        lastPrice = 100.00
+        currency = "USD"
+        royaltyRate = 0.05
+  
+  ^ above is the first test script we write.
+  at this point, we run into an error that says that we failed to create a Token "due to a missing authorization from 'UserAdmin'".
+  works like a model/db validation
+  this is exactly why we have userAdmin module to allow the userAdmin to allocate the ability to create these tokens to different types of issuers.
+  need to create an issuer contract on behalf of alice
+
+[2]
+
+Script execution failed on commit at Main:25:3:
+  Attempt to fetch or exercise a contract not visible to the reading parties.
+  Contract:  #0:0 (UserAdmin:Issuer)
+  actAs: 'Alice'
+  readAs:
+  Disclosed to: 'UserAdmin'
+
+Ledger time: 1970-01-01T00:00:00Z
+
+^ above error is caused by the new "choice" syntax, and can be fixed by adding the issuer as an observer in the template Issuer.
+Marked as [NS], "New Syntax"
+The error happens when a choice is being exercised, but the person exercising the choice is NOT an oberserver yet.
+If a particular choice is never exercised, this error won't happen, since no controller of the choice needs to be made an observer first.
+
+[3]
+
+Tried to fetch or exercise -homePackageId-:UserAdmin:Owner on contract 00893ac02130b0172377a8d80d4b6ea68c6dc97221022e57f9279e75a86a64cbab 
+but none of the reading parties [Bob] are contract stakeholders [UserAdmin]. Use of divulged contracts is deprecated and incompatible with pruning. 
+To remedy, add one of the readers [Bob] as an observer to the contract.
+
+^ added "observer owner -- [NA]" to the Owner template
+
+
+[4]
+Tried to fetch or exercise -homePackageId-:Token:Token on contract 00124793186db0e303b068b9a0026b5e6649dbc596faa239438fae70ec511cba29 but none of the reading parties [Bob] are contract stakeholders [Alice,UserAdmin]. Use of divulged contracts is deprecated and incompatible with pruning. To remedy, add one of the readers [Bob] as an observer to the contract.Script
+^ added "observer owner -- [NS]" to the Token template
+
+(30:21)
+-}
+
+
+
+{-
+  alice - creator of the token (issuer)
+  bob - first recipient (owner)
+  userAdmin - a party to grant rights
+
+  Change to make: 
+  Make it so that the first time a token gets transferred 
+  from the issuer to the first owner effectively, who isn't the issuer,
+  I don't want the royalty payment out of that. (19:45)
+  When you first purchase the art piece for the first time, you shouldn't have to pay for royalty, you should just a flat price.
+  We fix our AccepToken choice so it won't always produce 3 contracts.
+-}
+

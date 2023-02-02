@@ -1,0 +1,76 @@
+module Payment where
+
+
+{-
+    [2]
+
+    Payment will keep track of who needs to pay and if payable is actually paid
+    The new controller syntax requires a controller to be an observer first before they can exercise a choice, otherwise it'll throw an error
+    2.2 (18:13)
+-}
+
+
+-- both "from" party and "to" party agree that "from" has to pay "to"
+-- money needs to go from the "from" party to the "to" party
+-- in this amount, in this currency, according to this reference (memo field on a check)
+template Payable -- expresses that one party owes money to another
+    with
+        amount: Decimal
+        currency: Text
+        from: Party
+        to: Party
+        reference: Text -- memo field on a check
+    where
+        signatory from -- the person who is paying; they're the ones who holds the obligation/liability
+        observer to -- everyone that are obeservers get to see the contracts. although the "to" party has no obligation here, they still get to see the contract. this gives the "to" party a confirmation that the "from" party agreed to pay them.
+
+        choice ClaimPaid: ContractId PaymentClaim -- the person who is paying can claim to have paid the amount
+            -- "from" can put down their visa card -> they get a transactionId for that visa card -> tell the "to" party to go check it out
+            with
+                transactionId: Text
+            controller from -- the person who is paying Claims that they actually paid the payable (either by swiping their credit card, or transferring bitcoin, etc. they're the ones that will make a claim)
+            -- it's only visible to the "from" party
+            -- only the stakeholders of the template of a contract can see the contract.
+            -- in this case, only "from" party gets to see this contract
+            do
+                create PaymentClaim with .. -- ".." means the same parameters
+
+-- the "to" party can receive the payment
+template PaymentClaim 
+    with
+        amount: Decimal
+        currency: Text
+        from: Party
+        to: Party
+        reference: Text -- memo field on a check
+        transactionId: Text
+    where
+        signatory from
+        
+        choice Receive: ContractId Receipt
+            controller to -- now the "to" party is the stakeholder, b/c they have the right to receive the payment
+            -- once the payer pays and claims to have paied, it's the receipient's job to create a receipt, by agreeing that they've been paid
+            do
+                received <- getTime -- timestamp the receipt. get the current time and store it in this "received" field (again, it's like an instance variable) and we paste it onto our Receipt contract
+                create Receipt with ..
+
+
+template Receipt
+    with 
+        amount: Decimal
+        currency: Text
+        from: Party
+        to: Party
+        reference: Text -- memo field on a check
+        transactionId: Text
+        received: Time
+    where
+        signatory from, to -- "from" agreed to have paid, and "to" agreed to have received the money
+        -- "from" party should be the one who could archive the receipt, since they're the one who want to prove that they paid
+
+        choice Dismiss: ()
+            controller from
+            do return () -- "from" can dismiss this receipt; return () means return nothing
+            -- by default, all choices in the daml contract will archive the contract on which you exercise it.
+            -- so when "Dismiss" is exercised, it seems to do nothing, but since I didn't put any keywords on it (such as "nonconsuming"), it archives the contract.
+            -- Dismissing the contract receipt
