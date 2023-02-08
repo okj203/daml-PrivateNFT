@@ -106,15 +106,6 @@ label=<<table align = "left" border="0" cellborder="0" cellspacing="1">
 <tr><td align="left">transactionId</td></tr> 
 <tr><td align="left">received</td></tr> 
 </table>>;color=blue
-}subgraph cluster_Asset{
-n32[label=Create][color=green]; 
-n33[label=Archive][color=red]; 
-n34[label=Give][color=red]; 
-label=<<table align = "left" border="0" cellborder="0" cellspacing="1">
-<tr><td align="center"><b>Asset</b></td></tr><tr><td align="left">issuer</td></tr> 
-<tr><td align="left">owner</td></tr> 
-<tr><td align="left">name</td></tr> 
-</table>>;color=blue
 }n1->n17
 n5->n0
 n9->n21
@@ -125,6 +116,5 @@ n21->n23
 n21->n17
 n24->n26
 n27->n29
-n34->n32
 
 }

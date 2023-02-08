@@ -131,7 +131,7 @@ template OwnerRequest
         choice GrantOwnerRights: ContractId Owner -- resulting in a verified owner
             controller userAdmin
             do
-                create Owner with ..
+                create Owner with .. -- all the fields above
 
         choice RejectOwnerRequest: () -- incoming OwnerRequest may be rejected
             controller userAdmin
