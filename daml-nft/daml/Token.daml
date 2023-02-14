@@ -1,0 +1,167 @@
+module Token where
+
+import Payment -- import statement used for both daml libraries & modules written by me
+
+{-
+    [1]
+
+    Private NFT
+
+    1. content creators can mint nfts
+    2. owners can sell/transfer their nfts to someone else
+    3. ...but they have to pay $rolyalties (특허권 사용료/저작권 사용료/인세) (and for the notional transfer) back to the content creator - royalty scheme; this should protect the content creators from being bought very cheaply and then being resold, then they won't see any of the profits
+    4. participants must be explicitly permitted into each of the network before they can do anything - this is going to be on a private network governed by a user admin. so parties must be explicitly permitted whether they're issuers or content creators or if they're owners of NFTs.
+        - issuers are able to mint tokens
+        - owners are able to accept receipt of the tokens in a way which is undersigned by the userAdmin of the network. 
+
+    *** Token.daml contains the rights and obligations and the data model associated with my tokens
+    *** Payment.daml has the ability to create payables, claim payment for them, and then to create receipt once the payment has been made.
+    *** UserAdmin.daml contains the definition and onboarding for content creators or issuers as well as owners of tokens.   
+
+    Levi's workflow begins with creating the Token template, as he prefers to work from the final object that gets created and work his way up from there.
+-}
+
+-- behavior
+-- datamodel
+-- rights/obligations
+
+template Token
+    -- sql analogy: if you were to create a sql table, what would be the columns that you'd have?
+    -- oop analogy: what are the instance variables/data that this obj is going to contain?
+    with
+        issuer: Party -- : is used for specifying the data type of something
+        owner: Party -- person who gets to claim the token
+        description: Text
+        userAdmin: Party -- responsible for making sure that the issuer and the owner have been properly onboarded into my network (aka make sure that issuer & owner are legit)
+        issued: Time
+        lastPrice: Decimal -- keep track of the worth of the item at least according to what it was last purchased at.
+        currency: Text -- in a certain currency, which is specified in a text
+        royaltyRate: Decimal -- determines how much money gets paid back to the issuer. this should be some portion of the new price that gets transferred to the old owner 
+        -- i.e. if the royaltyRate is 2% and the token was sold at $100, then the new owner needs to pay $2 back to the issuer (creator of the token) and $100 to the owner.
+        -- data model of my token
+    where
+        -- rights and obligations surrounding this token
+        -- unlike a publicly issued nft, I want some responsible parties for this token.
+        -- I want issuer of this token to actually be on the hook for honoring this thing(?)
+        -- speficy who is liable for something
+        -- you can never be an obligeable party on a contract without your knowing/informed consent
+        -- the only way that a token can exist on the ledger having that issuer is if the issuer signed off on it
+        -- this way tokens are signed off by the people that you want to sign off on (liability side)
+
+        -- userAdmin makes sure that the issuer and the owner are legitimate parties on the ledger (KYC - know your client)
+        -- without the userAdmin, technically any party on the ledger could issue their own token. Daml will present someone faking to be someone else
+        -- maybe the owner of the token might not know what acual party id particular real world participants belongs to.
+        -- userAmin makes sure that party identities to issuer and owner are legit (obligation side of the token)
+        signatory issuer, userAdmin
+        observer owner -- [NS]
+
+        ensure userAdmin /= issuer
+
+        -- controller is authorized to offer this token to another owner
+        -- controller can offer the token which will result in an offer template
+        choice Offer: ContractId TokenOffer -- ContractId MUST be followed by a template name
+            with 
+                -- user input aka new value to create a new contract
+                newOwner: Party
+                price: Decimal -- offer this at a price
+            controller owner
+            do 
+                create TokenOffer with ..
+                -- create an offer with all of the variables within the current scope (the values remain the same)
+
+-- TokenOffer expresses the idea that we're giving the option to a new owner to take ownership of the token
+-- Since there's price involved, we need to ensure that the new owner accepts this price in order for the token to go into effect with the new owner.
+-- the token offer needs to have all the attributes as token, along with the attributes we are taking from the offer choice
+template TokenOffer
+    with
+        issuer: Party -- : is used for specifying the data type of something
+        owner: Party -- person who gets to claim the token
+        description: Text
+        userAdmin: Party -- responsible for making sure that the issuer and the owner have been properly onboarded into my network (aka make sure that issuer & owner are legit)
+        issued: Time
+        newOwner: Party -- the newOwner should be allowed to accept token offers.
+        price: Decimal -- offer price
+        lastPrice: Decimal
+        currency: Text
+        royaltyRate: Decimal
+    where
+        -- userAdmin makes sure that the new and old owners are legit
+        -- owner (old owner) must be the signatory as well to signify that they signed off on potentially offering this new token to a new owner
+        signatory issuer, userAdmin, owner
+        observer newOwner -- [NS]
+
+        -- something that makes the TokenOffer unique / some way to identify a token offer from any other
+        -- add the key as a tuple (issuer of the token, current owner, description)
+        key (issuer, owner, description): (Party, Party, Text)
+        maintainer key._2 -- 2nd member of the key tuple, aka the current owner
+        -- maintainer is somebody who is responsible for making sure that the key is unique within TokenOffer.
+        -- It needs to be one of the parties which is actually in the key. 
+        -- the current owner of the offer is the best one to do so, since they own the thing. they should be responsible for making sure that they don't make multiple offers. 
+        -- not that they could, based on what's here but let's say they have 2 tokens with exactly the same issuer or description. technically they could make 2 offers. 
+
+        -- we're going to give a right to the newOwner to accept the token
+        -- once the newOwner accepts the token, a new token is created where they're the owner, and we update the last price
+        -- +++ [IMPORTANT] a party directly exercising this choice onto a TokenOffer contract WON'T WORK b/c this does NOT provide any evidance of him being a legitimate/authorized owner on this network. Therefore, this choice can ONLY be exercised THROUGH the party's owner contract +++
+        choice AcceptToken: (ContractId Token, ContractId Payable, Optional(ContractId Payable)) -- create a tuple, make sure to return the 2 items in the return statement
+            controller newOwner, userAdmin -- requires both the approval of the newOwner and userAdmin
+            -- the token may be offered to any old party, but it also must be approved
+            -- the acceptance of the token should be approved by the userAdmin
+            -- the way to do so, is to make a conjunctive choice, where the controller in a choice contains more than 1 participants +++
+            -- the way daml works is it's unlikely that a single individual or a single endpoint will have access to both on behalf of the newOwner and the userAdmin.
+            -- we can set up a rights contract that allows a permitted issuer to act on behalf of both the userAdmin and as newOwner.
+            do
+                -- make payable for notional; from the new owner to the owner
+                -- if the price of something is $1, but if it allows you to buy $100 worth of something, the notional value is $100, but the price is still $1 (관념가치 face value of sth)
+                -- 관념가치란 기업과 금융기관들이 다른 사람들에게 떠넘긴 위험의 총규모
+                -- notional payment
+                fromNewOwnerToOwner <- create Payable -- don't forget to import the Payment module
+                    with
+                        from = newOwner
+                        to = owner
+                        amount = price
+                        currency
+                        reference = "Notional for `" <> description <> "`." -- description of the item
+
+                -- royalty payment. If the artwork is directly from the original issuer, you shouldn't have to pay royalty.
+                -- Conditional Royalty Payment: if the owner is the issuer, then no need to pay royalty to the owner
+                -- In case this conditional returns "None" I need to make the third type of the three-tuple in the type declaration "Optional" by writing as following: "Optional(ContractId Payable)"
+                -- "Optional" is a compound type/higher-order type that indicates: "sometimes you'll have a payable, sometimes you won't"
+                -- After changing the return type to Optional, go to all the places where "AcceptToken" is being exercised to change all of its third return type to be "Optional" as well. i.e. "AcceptTokenAsNewOwner", "AcceptTokenByKey"
+                condRoyaltyPayment <- if owner == issuer
+                    then return None
+                    else Some <$> create Payable -- create a Payable and prefix it with the type "Some"
+                        with 
+                            from = newOwner
+                            to = issuer
+                            amount = price * royaltyRate
+                            currency
+                            reference = "Royalty for `" <> description <> "`."
+
+                -- new token gets generated
+                newToken <- create Token
+                    with
+                        owner = newOwner
+                        lastPrice = price
+                        .. -- means everything else remains the same as before
+
+                -- now when the newOwner accepts the token, there's a notional payment (fromNewOwnerToOwner), royaltyPayment, and newToken gets generated in their name
+                -- newOwner will receive the asset, which is the token, and they'll incur (빚을지다) two liabilities (채무), corresponding to the two payments that they need to make
+                -- the newOwner needs to pay the issuer and the original owner.
+                return (newToken, fromNewOwnerToOwner, condRoyaltyPayment)
+
+        choice Reject: ContractId Token
+            controller newOwner
+            do
+                create Token with ..
+
+        choice ClawBack: ContractId Token
+            controller owner
+            do
+                create Token with ..
+                -- realistically, we would want to make it so that the owner cannot claw back immediately after offering by putting a time limit
+
+-- at this point we already have a market place where one token is transferred to another.
+-- when the new owner accepts the token there's no money needed to exchange hands
+
+-- at what point do you need to generate these payables? (26:06)
+-- once the token is accepted, we should make all of the payable.
